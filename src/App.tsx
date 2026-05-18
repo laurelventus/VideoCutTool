@@ -3,11 +3,17 @@ import {
   Clipboard,
   Copy,
   Download,
+  ExternalLink,
   FileJson,
   FileText,
+  Image,
+  KeyRound,
+  Link,
   Play,
   RefreshCcw,
+  Search,
   Sparkles,
+  Video,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
@@ -17,7 +23,8 @@ import {
   toMarkdown,
   videoTypeLabels,
 } from "./materialPlanner";
-import type { AspectRatio, PlannerOptions, ScenePlan, VideoType, VisualStyle } from "./types";
+import { searchPexelsAssets } from "./pexelsClient";
+import type { AspectRatio, AssetCandidate, PlannerOptions, ScenePlan, VideoType, VisualStyle } from "./types";
 
 const sampleScript =
   "普通人做短视频，最容易犯的错误不是不会剪辑，而是不知道每一句话该配什么画面。画面选错了，观众会觉得内容很散。真正高效的方法，是先把文案拆成分镜，再为每个分镜找到对应的图片、视频或 AI 素材。";
@@ -40,6 +47,9 @@ type KeywordField =
 
 export function App() {
   const [script, setScript] = useState(sampleScript);
+  const [pexelsApiKey, setPexelsApiKey] = useState(() => {
+    return localStorage.getItem("videoCutTool.pexelsApiKey") ?? import.meta.env.VITE_PEXELS_API_KEY ?? "";
+  });
   const [options, setOptions] = useState<PlannerOptions>({
     videoType: "knowledge",
     aspectRatio: "9:16",
@@ -52,6 +62,8 @@ export function App() {
   }));
   const [activeSceneId, setActiveSceneId] = useState("scene_001");
   const [notice, setNotice] = useState("已生成示例方案");
+  const [assetError, setAssetError] = useState("");
+  const [isSearchingAssets, setIsSearchingAssets] = useState(false);
 
   const activeScene = useMemo(
     () => scenes.find((scene) => scene.id === activeSceneId) ?? scenes[0],
@@ -81,6 +93,15 @@ export function App() {
     setScenes((current) =>
       current.map((scene) => (scene.id === sceneId ? { ...scene, ...patch } : scene)),
     );
+  }
+
+  function updatePexelsApiKey(value: string) {
+    setPexelsApiKey(value);
+    if (value.trim()) {
+      localStorage.setItem("videoCutTool.pexelsApiKey", value.trim());
+    } else {
+      localStorage.removeItem("videoCutTool.pexelsApiKey");
+    }
   }
 
   function updateKeyword(sceneId: string, field: KeywordField, value: string) {
@@ -126,6 +147,37 @@ export function App() {
       "application/json;charset=utf-8",
     );
     setNotice("已导出 JSON");
+  }
+
+  async function searchAssetsForActiveScene() {
+    if (!activeScene) {
+      return;
+    }
+
+    if (!pexelsApiKey.trim()) {
+      setAssetError("请先填写 Pexels API Key");
+      setNotice("缺少 Pexels API Key");
+      return;
+    }
+
+    setIsSearchingAssets(true);
+    setAssetError("");
+
+    try {
+      const assets = await searchPexelsAssets(activeScene, {
+        apiKey: pexelsApiKey.trim(),
+        aspectRatio: options.aspectRatio,
+        perPage: 6,
+      });
+      updateScene(activeScene.id, { assetCandidates: assets });
+      setNotice(`已找到 ${assets.length} 个素材候选`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "素材搜索失败";
+      setAssetError(message);
+      setNotice(message);
+    } finally {
+      setIsSearchingAssets(false);
+    }
   }
 
   return (
@@ -197,6 +249,20 @@ export function App() {
               </select>
             </label>
           </div>
+
+          <label className="api-key-field">
+            <span>
+              <KeyRound size={15} />
+              Pexels API Key
+            </span>
+            <input
+              value={pexelsApiKey}
+              type="password"
+              autoComplete="off"
+              placeholder="可选"
+              onChange={(event) => updatePexelsApiKey(event.target.value)}
+            />
+          </label>
 
           <div className="button-row">
             <button className="primary-button" onClick={generatePlan}>
@@ -297,6 +363,36 @@ export function App() {
               ))}
             </div>
 
+            <section className="asset-panel" aria-label="真实素材候选">
+              <div className="asset-panel-header">
+                <div>
+                  <p className="eyebrow">Pexels</p>
+                  <h2>素材候选</h2>
+                </div>
+                <button onClick={searchAssetsForActiveScene} disabled={isSearchingAssets}>
+                  <Search size={17} />
+                  {isSearchingAssets ? "搜索中" : "搜索"}
+                </button>
+              </div>
+              {assetError ? <p className="inline-error">{assetError}</p> : null}
+              {activeScene.assetCandidates.length > 0 ? (
+                <div className="asset-grid">
+                  {activeScene.assetCandidates.map((asset) => (
+                    <AssetCard
+                      key={asset.id}
+                      asset={asset}
+                      onCopy={() => copyText(asset.sourceUrl, "已复制素材来源链接")}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="asset-empty">
+                  <Image size={19} />
+                  <span>暂无素材候选</span>
+                </div>
+              )}
+            </section>
+
             <div className="keyword-grid">
               <FieldArea
                 label="图片搜索词 / 中文"
@@ -396,6 +492,55 @@ function PromptArea({ label, value, onChange, onCopy }: PromptAreaProps) {
       </div>
       <textarea value={value} rows={4} onChange={(event) => onChange(event.target.value)} spellCheck={false} />
     </div>
+  );
+}
+
+interface AssetCardProps {
+  asset: AssetCandidate;
+  onCopy: () => void;
+}
+
+function AssetCard({ asset, onCopy }: AssetCardProps) {
+  return (
+    <article className="asset-card">
+      <a className="asset-thumb" href={asset.sourceUrl} target="_blank" rel="noreferrer">
+        {asset.type === "video" ? (
+          <>
+            <video src={asset.previewUrl} poster={asset.thumbnailUrl} muted preload="metadata" />
+            <span className="asset-kind">
+              <Video size={14} />
+              视频
+            </span>
+          </>
+        ) : (
+          <>
+            <img src={asset.thumbnailUrl} alt={asset.title} loading="lazy" />
+            <span className="asset-kind">
+              <Image size={14} />
+              图片
+            </span>
+          </>
+        )}
+      </a>
+      <div className="asset-card-body">
+        <strong>{asset.title}</strong>
+        <span>{asset.author}</span>
+        <span>
+          {asset.width} x {asset.height}
+          {asset.duration ? ` · ${asset.duration}s` : ""}
+        </span>
+      </div>
+      <div className="asset-actions">
+        <a href={asset.sourceUrl} target="_blank" rel="noreferrer">
+          <ExternalLink size={15} />
+          来源
+        </a>
+        <button onClick={onCopy}>
+          <Link size={15} />
+          链接
+        </button>
+      </div>
+    </article>
   );
 }
 

@@ -9,6 +9,16 @@ npm install
 npm run dev
 ```
 
+## Pexels 素材搜索
+
+复制 `.env.example` 为 `.env`，填入 Pexels API Key：
+
+```bash
+VITE_PEXELS_API_KEY=your_pexels_api_key
+```
+
+也可以在页面左侧直接填写 API Key。当前版本是纯前端本地工具，Key 会用于浏览器端请求 Pexels API，不适合直接作为公开网站部署。
+
 ## 构建
 
 ```bash

@@ -203,6 +203,7 @@ export function createMaterialPlan(script: string, options: PlannerOptions): Sce
       aiVideoPrompt: buildVideoPrompt(segment, profile, options, keyTerms),
       negativePrompt: "low quality, blurry, distorted hands, unreadable text, watermark, logo, overexposed, duplicate faces",
       confirmed: false,
+      assetCandidates: [],
     };
   });
 }
@@ -242,9 +243,26 @@ export function toMarkdown(scenes: ScenePlan[], options: PlannerOptions): string
     "",
     `反向提示词：${scene.negativePrompt}`,
     "",
+    ...formatAssetsForMarkdown(scene),
+    "",
   ]);
 
   return [...header, ...body].join("\n");
+}
+
+function formatAssetsForMarkdown(scene: ScenePlan): string[] {
+  if (scene.assetCandidates.length === 0) {
+    return [];
+  }
+
+  return [
+    "素材候选：",
+    "",
+    ...scene.assetCandidates.map((asset) => {
+      const size = `${asset.width}x${asset.height}${asset.duration ? `, ${asset.duration}s` : ""}`;
+      return `- ${asset.type}｜${asset.title}｜${asset.author}｜${size}｜${asset.license}｜${asset.sourceUrl}`;
+    }),
+  ];
 }
 
 function splitScript(script: string): string[] {

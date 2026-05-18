@@ -29,6 +29,27 @@ export interface KeywordGroup {
   en: string[];
 }
 
+export type AssetCandidateType = "photo" | "video";
+
+export interface AssetCandidate {
+  id: string;
+  sceneId: string;
+  type: AssetCandidateType;
+  source: "Pexels";
+  title: string;
+  previewUrl: string;
+  thumbnailUrl: string;
+  downloadUrl: string;
+  author: string;
+  authorUrl: string;
+  license: string;
+  sourceUrl: string;
+  width: number;
+  height: number;
+  duration?: number;
+  relevanceScore: number;
+}
+
 export interface ScenePlan {
   id: string;
   order: number;
@@ -43,6 +64,7 @@ export interface ScenePlan {
   aiVideoPrompt: string;
   negativePrompt: string;
   confirmed: boolean;
+  assetCandidates: AssetCandidate[];
 }
 
 export interface PlannerOptions {

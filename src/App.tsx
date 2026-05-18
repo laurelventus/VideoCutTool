@@ -1,5 +1,6 @@
 import {
   Check,
+  CheckCircle2,
   Clipboard,
   Copy,
   Download,
@@ -64,6 +65,7 @@ export function App() {
   const [notice, setNotice] = useState("已生成示例方案");
   const [assetError, setAssetError] = useState("");
   const [isSearchingAssets, setIsSearchingAssets] = useState(false);
+  const [isSearchingAllAssets, setIsSearchingAllAssets] = useState(false);
 
   const activeScene = useMemo(
     () => scenes.find((scene) => scene.id === activeSceneId) ?? scenes[0],
@@ -71,6 +73,7 @@ export function App() {
   );
 
   const confirmedCount = scenes.filter((scene) => scene.confirmed).length;
+  const selectedAssetCount = scenes.filter((scene) => Boolean(scene.selectedAssetId)).length;
 
   function updateOption<Key extends keyof PlannerOptions>(key: Key, value: PlannerOptions[Key]) {
     setOptions((current) => ({ ...current, [key]: value }));
@@ -149,6 +152,36 @@ export function App() {
     setNotice("已导出 JSON");
   }
 
+  function exportLicenseCsv() {
+    const selectedAssets = scenes.flatMap((scene) => {
+      const selectedAsset = scene.assetCandidates.find((asset) => asset.id === scene.selectedAssetId);
+      return selectedAsset ? [{ scene, asset: selectedAsset }] : [];
+    });
+
+    if (selectedAssets.length === 0) {
+      setNotice("请先选择素材");
+      return;
+    }
+
+    const rows = [
+      ["scene_order", "scene_title", "asset_type", "source", "title", "author", "license", "source_url", "download_url"],
+      ...selectedAssets.map(({ scene, asset }) => [
+        String(scene.order),
+        scene.title,
+        asset.type,
+        asset.source,
+        asset.title,
+        asset.author,
+        asset.license,
+        asset.sourceUrl,
+        asset.downloadUrl,
+      ]),
+    ];
+
+    downloadFile("asset-license-manifest.csv", toCsv(rows), "text/csv;charset=utf-8");
+    setNotice("已导出授权清单");
+  }
+
   async function searchAssetsForActiveScene() {
     if (!activeScene) {
       return;
@@ -169,7 +202,10 @@ export function App() {
         aspectRatio: options.aspectRatio,
         perPage: 6,
       });
-      updateScene(activeScene.id, { assetCandidates: assets });
+      updateScene(activeScene.id, {
+        assetCandidates: assets,
+        selectedAssetId: assets[0]?.id,
+      });
       setNotice(`已找到 ${assets.length} 个素材候选`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "素材搜索失败";
@@ -178,6 +214,50 @@ export function App() {
     } finally {
       setIsSearchingAssets(false);
     }
+  }
+
+  async function searchAssetsForAllScenes() {
+    if (!pexelsApiKey.trim()) {
+      setAssetError("请先填写 Pexels API Key");
+      setNotice("缺少 Pexels API Key");
+      return;
+    }
+
+    setIsSearchingAllAssets(true);
+    setAssetError("");
+
+    let totalAssets = 0;
+    let successScenes = 0;
+    let firstError = "";
+
+    for (const scene of scenes) {
+      try {
+        const assets = await searchPexelsAssets(scene, {
+          apiKey: pexelsApiKey.trim(),
+          aspectRatio: options.aspectRatio,
+          perPage: 4,
+        });
+
+        totalAssets += assets.length;
+        successScenes += 1;
+        updateScene(scene.id, {
+          assetCandidates: assets,
+          selectedAssetId: assets[0]?.id,
+        });
+      } catch (error) {
+        firstError = firstError || (error instanceof Error ? error.message : "素材搜索失败");
+      }
+    }
+
+    setIsSearchingAllAssets(false);
+
+    if (successScenes === 0 && firstError) {
+      setAssetError(firstError);
+      setNotice(firstError);
+      return;
+    }
+
+    setNotice(`已为 ${successScenes} 个分镜找到 ${totalAssets} 个素材`);
   }
 
   return (
@@ -190,6 +270,7 @@ export function App() {
         <div className="status-strip" aria-label="生成状态">
           <span>{scenes.length} 分镜</span>
           <span>{confirmedCount} 已确认</span>
+          <span>{selectedAssetCount} 已选素材</span>
           <span>{notice}</span>
         </div>
       </header>
@@ -282,6 +363,15 @@ export function App() {
             </button>
           </div>
 
+          <button
+            className="wide-tool-button"
+            onClick={searchAssetsForAllScenes}
+            disabled={isSearchingAllAssets || scenes.length === 0}
+          >
+            <Search size={17} />
+            {isSearchingAllAssets ? "批量搜索中" : "搜索全部素材"}
+          </button>
+
           <div className="export-row">
             <button onClick={exportMarkdown}>
               <FileText size={17} />
@@ -292,6 +382,10 @@ export function App() {
               JSON
             </button>
           </div>
+          <button className="wide-tool-button secondary" onClick={exportLicenseCsv}>
+            <Download size={17} />
+            授权清单
+          </button>
         </aside>
 
         <section className="scene-list" aria-label="分镜列表">
@@ -381,6 +475,11 @@ export function App() {
                     <AssetCard
                       key={asset.id}
                       asset={asset}
+                      selected={asset.id === activeScene.selectedAssetId}
+                      onSelect={() => {
+                        updateScene(activeScene.id, { selectedAssetId: asset.id });
+                        setNotice("已选择素材");
+                      }}
                       onCopy={() => copyText(asset.sourceUrl, "已复制素材来源链接")}
                     />
                   ))}
@@ -497,12 +596,14 @@ function PromptArea({ label, value, onChange, onCopy }: PromptAreaProps) {
 
 interface AssetCardProps {
   asset: AssetCandidate;
+  selected: boolean;
+  onSelect: () => void;
   onCopy: () => void;
 }
 
-function AssetCard({ asset, onCopy }: AssetCardProps) {
+function AssetCard({ asset, selected, onSelect, onCopy }: AssetCardProps) {
   return (
-    <article className="asset-card">
+    <article className={`asset-card ${selected ? "is-selected" : ""}`}>
       <a className="asset-thumb" href={asset.sourceUrl} target="_blank" rel="noreferrer">
         {asset.type === "video" ? (
           <>
@@ -531,6 +632,10 @@ function AssetCard({ asset, onCopy }: AssetCardProps) {
         </span>
       </div>
       <div className="asset-actions">
+        <button className={selected ? "selected-action" : ""} onClick={onSelect}>
+          <CheckCircle2 size={15} />
+          {selected ? "已选" : "选择"}
+        </button>
         <a href={asset.sourceUrl} target="_blank" rel="noreferrer">
           <ExternalLink size={15} />
           来源
@@ -553,4 +658,17 @@ function downloadFile(filename: string, content: string, type: string) {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function toCsv(rows: string[][]): string {
+  return rows
+    .map((row) =>
+      row
+        .map((cell) => {
+          const value = cell.replace(/"/g, '""');
+          return /[",\n\r]/.test(value) ? `"${value}"` : value;
+        })
+        .join(","),
+    )
+    .join("\n");
 }

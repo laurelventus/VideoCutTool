@@ -184,7 +184,8 @@ select {
 .button-row button,
 .export-row button,
 .footer-actions button,
-.primary-button {
+.primary-button,
+.wide-tool-button {
   min-height: 42px;
   display: inline-flex;
   align-items: center;
@@ -199,6 +200,24 @@ select {
   flex: 1;
   background: #245f46;
   color: #ffffff;
+}
+
+.wide-tool-button {
+  width: 100%;
+  margin-top: 10px;
+  border: 1px solid #ccd5c5;
+  background: #26352d;
+  color: #ffffff;
+}
+
+.wide-tool-button.secondary {
+  background: #ffffff;
+  color: #27362e;
+}
+
+.wide-tool-button:disabled {
+  cursor: wait;
+  opacity: 0.66;
 }
 
 .export-row button,
@@ -435,6 +454,11 @@ select {
   background: #ffffff;
 }
 
+.asset-card.is-selected {
+  border-color: #2f7d58;
+  box-shadow: 0 0 0 3px rgba(47, 125, 88, 0.14);
+}
+
 .asset-thumb {
   position: relative;
   display: block;
@@ -492,13 +516,19 @@ select {
 
 .asset-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   padding: 0 10px 10px;
 }
 
 .asset-actions button {
   width: 100%;
+}
+
+.asset-actions .selected-action {
+  border-color: #2f7d58;
+  background: #e8f4ed;
+  color: #245f46;
 }
 
 .asset-empty {

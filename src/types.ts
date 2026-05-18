@@ -65,6 +65,7 @@ export interface ScenePlan {
   negativePrompt: string;
   confirmed: boolean;
   assetCandidates: AssetCandidate[];
+  selectedAssetId?: string;
 }
 
 export interface PlannerOptions {

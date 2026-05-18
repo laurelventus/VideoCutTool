@@ -20,6 +20,12 @@ interface VisualProfile {
   promptScene: string;
 }
 
+interface VisualKeyword {
+  zh: string;
+  en: string;
+  triggers: string[];
+}
+
 export const videoTypeLabels: Record<VideoType, string> = {
   talking_head: "口播",
   knowledge: "知识科普",
@@ -154,34 +160,101 @@ const defaultProfile: VisualProfile = {
   promptScene: "a practical visual metaphor for a creator workflow",
 };
 
-const stopWords = [
-  "这个",
-  "一个",
-  "我们",
-  "你会",
-  "可以",
-  "如果",
-  "因为",
-  "所以",
-  "但是",
-  "没有",
-  "不是",
-  "就是",
-  "时候",
-  "需要",
-  "自己",
+const visualKeywordBank: VisualKeyword[] = [
+  {
+    zh: "短视频创作者",
+    en: "short video creator",
+    triggers: ["短视频", "创作者", "自媒体", "普通人"],
+  },
+  {
+    zh: "视频剪辑",
+    en: "video editing",
+    triggers: ["剪辑", "剪视频", "剪片", "时间线"],
+  },
+  {
+    zh: "画面选择",
+    en: "choosing video clips",
+    triggers: ["配什么画面", "画面选错", "画面", "配图"],
+  },
+  {
+    zh: "常见错误",
+    en: "common mistake",
+    triggers: ["错误", "犯错", "错了", "误区"],
+  },
+  {
+    zh: "内容散乱",
+    en: "scattered content",
+    triggers: ["很散", "散乱", "混乱", "杂乱"],
+  },
+  {
+    zh: "分镜规划",
+    en: "storyboard planning",
+    triggers: ["分镜", "拆分", "拆成分镜", "镜头"],
+  },
+  {
+    zh: "素材库",
+    en: "media library",
+    triggers: ["素材库", "素材", "图片", "视频"],
+  },
+  {
+    zh: "AI 生成素材",
+    en: "AI generated media",
+    triggers: ["AI", "生成", "提示词"],
+  },
+  {
+    zh: "工作流程",
+    en: "creative workflow",
+    triggers: ["流程", "方法", "步骤", "工作流"],
+  },
+  {
+    zh: "工作效率",
+    en: "productivity workflow",
+    triggers: ["效率", "高效", "快速", "省时间"],
+  },
+  {
+    zh: "观众观看",
+    en: "viewer watching short video",
+    triggers: ["观众", "观看", "刷视频", "用户观看"],
+  },
+  {
+    zh: "电脑工作台",
+    en: "creator desk setup",
+    triggers: ["电脑", "工作台", "桌面", "办公桌"],
+  },
+  {
+    zh: "手机拍摄",
+    en: "phone filming",
+    triggers: ["手机", "拍摄", "录制", "镜头前"],
+  },
+  {
+    zh: "数据看板",
+    en: "analytics dashboard",
+    triggers: ["数据", "播放", "完播", "转化", "增长"],
+  },
+  {
+    zh: "产品界面",
+    en: "product interface",
+    triggers: ["产品", "工具", "软件", "平台", "系统"],
+  },
+  {
+    zh: "团队协作",
+    en: "team collaboration",
+    triggers: ["团队", "协作", "讨论", "复盘"],
+  },
 ];
 
 export function createMaterialPlan(script: string, options: PlannerOptions): ScenePlan[] {
   return splitScript(script).map((segment, index) => {
     const profile = pickProfile(segment);
-    const keyTerms = extractKeyTerms(segment);
+    const visualTerms = extractVisualKeywords(segment);
     const title = buildTitle(segment, profile, index);
     const duration = clamp(Math.round(segment.length / 9), 3, 7);
-    const zhKeywords = unique([...keyTerms, ...profile.imageZh]).slice(0, 5);
-    const videoZhKeywords = unique([...keyTerms, ...profile.videoZh]).slice(0, 5);
-    const imageEnKeywords = unique([...profile.imageEn, ...translateKeyTerms(keyTerms)]).slice(0, 5);
-    const videoEnKeywords = unique([...profile.videoEn, ...translateKeyTerms(keyTerms)]).slice(0, 5);
+    const zhVisualKeywords = visualTerms.map((term) => term.zh);
+    const enVisualKeywords = visualTerms.map((term) => term.en);
+    const zhKeywords = unique([...zhVisualKeywords, ...profile.imageZh]).slice(0, 5);
+    const videoZhKeywords = unique([...zhVisualKeywords, ...profile.videoZh]).slice(0, 5);
+    const imageEnKeywords = unique([...profile.imageEn, ...enVisualKeywords]).slice(0, 5);
+    const videoEnKeywords = unique([...profile.videoEn, ...enVisualKeywords]).slice(0, 5);
 
     return {
       id: `scene_${String(index + 1).padStart(3, "0")}`,
@@ -199,11 +272,12 @@ export function createMaterialPlan(script: string, options: PlannerOptions): Sce
         zh: videoZhKeywords,
         en: videoEnKeywords,
       },
-      aiImagePrompt: buildImagePrompt(segment, profile, options, keyTerms),
-      aiVideoPrompt: buildVideoPrompt(segment, profile, options, keyTerms),
+      aiImagePrompt: buildImagePrompt(profile, options, visualTerms),
+      aiVideoPrompt: buildVideoPrompt(profile, options, visualTerms),
       negativePrompt: "low quality, blurry, distorted hands, unreadable text, watermark, logo, overexposed, duplicate faces",
       confirmed: false,
       assetCandidates: [],
+      selectedAssetId: undefined,
     };
   });
 }
@@ -243,11 +317,30 @@ export function toMarkdown(scenes: ScenePlan[], options: PlannerOptions): string
     "",
     `反向提示词：${scene.negativePrompt}`,
     "",
+    ...formatSelectedAssetForMarkdown(scene),
+    "",
     ...formatAssetsForMarkdown(scene),
     "",
   ]);
 
   return [...header, ...body].join("\n");
+}
+
+function formatSelectedAssetForMarkdown(scene: ScenePlan): string[] {
+  if (!scene.selectedAssetId) {
+    return [];
+  }
+
+  const asset = scene.assetCandidates.find((candidate) => candidate.id === scene.selectedAssetId);
+  if (!asset) {
+    return [];
+  }
+
+  return [
+    `已选素材：${asset.type}｜${asset.title}｜${asset.author}｜${asset.license}`,
+    "",
+    `素材来源：${asset.sourceUrl}`,
+  ];
 }
 
 function formatAssetsForMarkdown(scene: ScenePlan): string[] {
@@ -289,12 +382,14 @@ function splitScript(script: string): string[] {
     .map((part) => part.trim())
     .filter(Boolean);
 
-  const parts = rawParts.length > 1 ? rawParts : normalized.split(/[，,]/).map((part) => part.trim()).filter(Boolean);
+  const shouldSplitByComma = rawParts.length === 1 && !/[。！？!?；;]/.test(normalized);
+  const parts = shouldSplitByComma ? normalized.split(/[，,]/).map((part) => part.trim()).filter(Boolean) : rawParts;
+  const joiner = shouldSplitByComma ? "，" : "";
   const scenes: string[] = [];
   let buffer = "";
 
   parts.forEach((part) => {
-    const candidate = buffer ? `${buffer}${part}` : part;
+    const candidate = buffer ? `${buffer}${joiner}${part}` : part;
     const endsSentence = /[。！？!?；;]$/.test(part);
 
     if (candidate.length < 16 && !endsSentence) {
@@ -312,7 +407,7 @@ function splitScript(script: string): string[] {
 
   if (buffer) {
     if (scenes.length > 0 && buffer.length < 16) {
-      scenes[scenes.length - 1] = `${scenes[scenes.length - 1]}${buffer}`;
+      scenes[scenes.length - 1] = `${scenes[scenes.length - 1]}${joiner}${buffer}`;
     } else {
       scenes.push(buffer);
     }
@@ -361,15 +456,13 @@ function pickProfile(segment: string): VisualProfile {
   return bestProfile;
 }
 
-function extractKeyTerms(segment: string): string[] {
-  const matches = segment.match(/[\u4e00-\u9fa5A-Za-z0-9]{2,8}/g) ?? [];
-  return unique(
-    matches
-      .map((term) => term.replace(/[，。！？!?；;、]/g, ""))
-      .filter((term) => term.length >= 2)
-      .filter((term) => !stopWords.some((stopWord) => term.includes(stopWord)))
-      .slice(0, 6),
+function extractVisualKeywords(segment: string): VisualKeyword[] {
+  const normalized = segment.toLowerCase();
+  const matched = visualKeywordBank.filter((keyword) =>
+    keyword.triggers.some((trigger) => normalized.includes(trigger.toLowerCase())),
   );
+
+  return matched.slice(0, 5);
 }
 
 function buildTitle(segment: string, profile: VisualProfile, index: number): string {
@@ -379,40 +472,46 @@ function buildTitle(segment: string, profile: VisualProfile, index: number): str
 }
 
 function buildImagePrompt(
-  segment: string,
   profile: VisualProfile,
   options: PlannerOptions,
-  keyTerms: string[],
+  visualTerms: VisualKeyword[],
 ): string {
-  const terms = keyTerms.length > 0 ? `related to ${keyTerms.join(", ")}` : "related to the script segment";
+  const terms = buildPromptTheme(visualTerms);
   return [
     profile.promptScene,
-    terms,
+    `visual theme: ${terms}`,
     videoContext[options.videoType],
     stylePrompt[options.visualStyle],
     ratioPrompt[options.aspectRatio],
     "clear subject, practical B-roll material, no readable text",
-    `script meaning: ${segment}`,
+    "suitable for matching a spoken script segment",
   ].join(", ");
 }
 
 function buildVideoPrompt(
-  segment: string,
   profile: VisualProfile,
   options: PlannerOptions,
-  keyTerms: string[],
+  visualTerms: VisualKeyword[],
 ): string {
   const motion = pickMotion(profile.key);
-  const terms = keyTerms.length > 0 ? `visual cues: ${keyTerms.join(", ")}` : "visual cues from the script";
+  const terms = buildPromptTheme(visualTerms);
   return [
     `${motion} of ${profile.promptScene}`,
-    terms,
+    `visual cues: ${terms}`,
     videoContext[options.videoType],
     stylePrompt[options.visualStyle],
     ratioPrompt[options.aspectRatio],
     "smooth motion, realistic pacing, usable as short video B-roll, no visible brand logos",
-    `script meaning: ${segment}`,
+    "suitable for matching a spoken script segment",
   ].join(", ");
+}
+
+function buildPromptTheme(visualTerms: VisualKeyword[]): string {
+  if (visualTerms.length === 0) {
+    return "creator workflow, practical visual metaphor";
+  }
+
+  return visualTerms.map((term) => term.en).slice(0, 4).join(", ");
 }
 
 function pickMotion(profileKey: string): string {
@@ -427,29 +526,6 @@ function pickMotion(profileKey: string): string {
   };
 
   return motions[profileKey] ?? motions.context;
-}
-
-function translateKeyTerms(terms: string[]): string[] {
-  const dictionary: Record<string, string> = {
-    文案: "script writing",
-    提示词: "prompt engineering",
-    图片: "image material",
-    视频: "video footage",
-    素材: "media assets",
-    剪辑: "video editing",
-    短视频: "short video",
-    创作者: "content creator",
-    用户: "user",
-    产品: "product",
-    工具: "tool",
-    数据: "data analytics",
-    效率: "productivity",
-    方法: "method",
-    流程: "workflow",
-    结果: "result",
-  };
-
-  return terms.map((term) => dictionary[term] ?? term).filter(Boolean);
 }
 
 function ensureAiVideo(assetTypes: AssetKind[]): AssetKind[] {

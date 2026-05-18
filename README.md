@@ -14,10 +14,10 @@ npm run dev
 复制 `.env.example` 为 `.env`，填入 Pexels API Key：
 
 ```bash
-VITE_PEXELS_API_KEY=your_pexels_api_key
+PEXELS_API_KEY=your_pexels_api_key
 ```
 
-也可以在页面左侧直接填写 API Key。当前版本是纯前端本地工具，Key 会用于浏览器端请求 Pexels API，不适合直接作为公开网站部署。
+素材搜索通过本地 Vite API 代理请求 Pexels，Key 只从本地 `.env` 读取，不会出现在页面输入框或前端请求里。修改 `.env` 后需要重启 `npm run dev`。
 
 填好 Key 后可以：
 

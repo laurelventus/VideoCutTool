@@ -8,7 +8,6 @@ import {
   FileJson,
   FileText,
   Image,
-  KeyRound,
   Link,
   Play,
   RefreshCcw,
@@ -48,9 +47,6 @@ type KeywordField =
 
 export function App() {
   const [script, setScript] = useState(sampleScript);
-  const [pexelsApiKey, setPexelsApiKey] = useState(() => {
-    return localStorage.getItem("videoCutTool.pexelsApiKey") ?? import.meta.env.VITE_PEXELS_API_KEY ?? "";
-  });
   const [options, setOptions] = useState<PlannerOptions>({
     videoType: "knowledge",
     aspectRatio: "9:16",
@@ -96,15 +92,6 @@ export function App() {
     setScenes((current) =>
       current.map((scene) => (scene.id === sceneId ? { ...scene, ...patch } : scene)),
     );
-  }
-
-  function updatePexelsApiKey(value: string) {
-    setPexelsApiKey(value);
-    if (value.trim()) {
-      localStorage.setItem("videoCutTool.pexelsApiKey", value.trim());
-    } else {
-      localStorage.removeItem("videoCutTool.pexelsApiKey");
-    }
   }
 
   function updateKeyword(sceneId: string, field: KeywordField, value: string) {
@@ -187,18 +174,11 @@ export function App() {
       return;
     }
 
-    if (!pexelsApiKey.trim()) {
-      setAssetError("请先填写 Pexels API Key");
-      setNotice("缺少 Pexels API Key");
-      return;
-    }
-
     setIsSearchingAssets(true);
     setAssetError("");
 
     try {
       const assets = await searchPexelsAssets(activeScene, {
-        apiKey: pexelsApiKey.trim(),
         aspectRatio: options.aspectRatio,
         perPage: 6,
       });
@@ -217,12 +197,6 @@ export function App() {
   }
 
   async function searchAssetsForAllScenes() {
-    if (!pexelsApiKey.trim()) {
-      setAssetError("请先填写 Pexels API Key");
-      setNotice("缺少 Pexels API Key");
-      return;
-    }
-
     setIsSearchingAllAssets(true);
     setAssetError("");
 
@@ -233,7 +207,6 @@ export function App() {
     for (const scene of scenes) {
       try {
         const assets = await searchPexelsAssets(scene, {
-          apiKey: pexelsApiKey.trim(),
           aspectRatio: options.aspectRatio,
           perPage: 4,
         });
@@ -331,19 +304,9 @@ export function App() {
             </label>
           </div>
 
-          <label className="api-key-field">
-            <span>
-              <KeyRound size={15} />
-              Pexels API Key
-            </span>
-            <input
-              value={pexelsApiKey}
-              type="password"
-              autoComplete="off"
-              placeholder="可选"
-              onChange={(event) => updatePexelsApiKey(event.target.value)}
-            />
-          </label>
+          <div className="api-status" role="note">
+            <span>Pexels Key 从本地 .env 读取</span>
+          </div>
 
           <div className="button-row">
             <button className="primary-button" onClick={generatePlan}>

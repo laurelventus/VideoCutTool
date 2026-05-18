@@ -162,15 +162,18 @@ select {
   margin-top: 14px;
 }
 
-.api-key-field {
-  display: grid;
-  margin-top: 14px;
-}
-
-.api-key-field span {
-  display: inline-flex;
+.api-status {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  min-height: 40px;
+  margin-top: 14px;
+  border: 1px solid #d8ddcf;
+  border-radius: 8px;
+  background: #f7f8f2;
+  color: #4e5b51;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .button-row,

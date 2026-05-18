@@ -6,6 +6,7 @@ const PEXELS_LICENSE = "Pexels License";
 
 type AspectRatio = "9:16" | "16:9" | "1:1";
 type AssetCandidateType = "photo" | "video";
+type AssetSearchType = "all" | "photo" | "video";
 
 interface KeywordGroup {
   zh: string[];
@@ -42,6 +43,7 @@ interface SearchPayload {
   scene: ScenePlan;
   options: {
     aspectRatio: AspectRatio;
+    assetType?: AssetSearchType;
     perPage?: number;
   };
 }
@@ -139,19 +141,24 @@ function installPexelsMiddleware(server: ViteDevServer | PreviewServer, apiKey: 
 async function searchPexelsAssets(payload: SearchPayload, apiKey: string): Promise<AssetCandidate[]> {
   const photoQuery = buildQuery(payload.scene.imageSearchKeywords.en, payload.scene.title);
   const videoQuery = buildQuery(payload.scene.videoSearchKeywords.en, payload.scene.title);
+  const assetType = payload.options.assetType ?? "all";
+  const perPage = clamp(payload.options.perPage ?? 6, 1, 12);
+  const tasks: Promise<AssetCandidate[]>[] = [];
 
-  const [photoResult, videoResult] = await Promise.allSettled([
-    searchPexelsPhotos(payload.scene, photoQuery, payload.options.aspectRatio, payload.options.perPage ?? 6, apiKey),
-    searchPexelsVideos(payload.scene, videoQuery, payload.options.aspectRatio, payload.options.perPage ?? 6, apiKey),
-  ]);
+  if (assetType === "all" || assetType === "photo") {
+    tasks.push(searchPexelsPhotos(payload.scene, photoQuery, payload.options.aspectRatio, perPage, apiKey));
+  }
 
-  const assets = [
-    ...(photoResult.status === "fulfilled" ? photoResult.value : []),
-    ...(videoResult.status === "fulfilled" ? videoResult.value : []),
-  ];
+  if (assetType === "all" || assetType === "video") {
+    tasks.push(searchPexelsVideos(payload.scene, videoQuery, payload.options.aspectRatio, perPage, apiKey));
+  }
+
+  const results = await Promise.allSettled(tasks);
+
+  const assets = results.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
 
   if (assets.length === 0) {
-    const firstError = [photoResult, videoResult].find((result) => result.status === "rejected");
+    const firstError = results.find((result) => result.status === "rejected");
     if (firstError?.status === "rejected") {
       throw new Error(firstError.reason instanceof Error ? firstError.reason.message : "素材搜索失败");
     }
@@ -313,6 +320,10 @@ function scoreAsset(title: string, query: string, width: number, height: number,
   const orientationBonus = matchesOrientation(width, height, toPexelsOrientation(aspectRatio)) ? 0.16 : 0;
 
   return Number(Math.min(0.98, 0.68 + keywordHits * 0.04 + orientationBonus).toFixed(2));
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }
 
 function readJsonBody(request: IncomingMessage): Promise<unknown> {

@@ -24,7 +24,16 @@ import {
   videoTypeLabels,
 } from "./materialPlanner";
 import { searchPexelsAssets } from "./pexelsClient";
-import type { AspectRatio, AssetCandidate, PlannerOptions, ScenePlan, VideoType, VisualStyle } from "./types";
+import type {
+  AspectRatio,
+  AssetCandidate,
+  AssetSearchType,
+  AssetSortMode,
+  PlannerOptions,
+  ScenePlan,
+  VideoType,
+  VisualStyle,
+} from "./types";
 
 const sampleScript =
   "普通人做短视频，最容易犯的错误不是不会剪辑，而是不知道每一句话该配什么画面。画面选错了，观众会觉得内容很散。真正高效的方法，是先把文案拆成分镜，再为每个分镜找到对应的图片、视频或 AI 素材。";
@@ -37,6 +46,18 @@ const assetTypeLabels: Record<string, string> = {
   screen_recording: "录屏",
   ai_image: "AI 图",
   ai_video: "AI 视频",
+};
+
+const assetSearchTypeLabels: Record<AssetSearchType, string> = {
+  all: "全部",
+  photo: "图片",
+  video: "视频",
+};
+
+const assetSortLabels: Record<AssetSortMode, string> = {
+  relevance: "相关度",
+  resolution: "分辨率",
+  duration: "时长",
 };
 
 type KeywordField =
@@ -62,11 +83,25 @@ export function App() {
   const [assetError, setAssetError] = useState("");
   const [isSearchingAssets, setIsSearchingAssets] = useState(false);
   const [isSearchingAllAssets, setIsSearchingAllAssets] = useState(false);
+  const [assetSearchType, setAssetSearchType] = useState<AssetSearchType>("all");
+  const [assetSortMode, setAssetSortMode] = useState<AssetSortMode>("relevance");
+  const [assetPerPage, setAssetPerPage] = useState(4);
 
   const activeScene = useMemo(
     () => scenes.find((scene) => scene.id === activeSceneId) ?? scenes[0],
     [activeSceneId, scenes],
   );
+
+  const visibleAssets = useMemo(() => {
+    if (!activeScene) {
+      return [];
+    }
+
+    return sortAssets(
+      activeScene.assetCandidates.filter((asset) => assetSearchType === "all" || asset.type === assetSearchType),
+      assetSortMode,
+    );
+  }, [activeScene, assetSearchType, assetSortMode]);
 
   const confirmedCount = scenes.filter((scene) => scene.confirmed).length;
   const selectedAssetCount = scenes.filter((scene) => Boolean(scene.selectedAssetId)).length;
@@ -180,7 +215,8 @@ export function App() {
     try {
       const assets = await searchPexelsAssets(activeScene, {
         aspectRatio: options.aspectRatio,
-        perPage: 6,
+        assetType: assetSearchType,
+        perPage: assetPerPage,
       });
       updateScene(activeScene.id, {
         assetCandidates: assets,
@@ -208,7 +244,8 @@ export function App() {
       try {
         const assets = await searchPexelsAssets(scene, {
           aspectRatio: options.aspectRatio,
-          perPage: 4,
+          assetType: assetSearchType,
+          perPage: assetPerPage,
         });
 
         totalAssets += assets.length;
@@ -431,10 +468,46 @@ export function App() {
                   {isSearchingAssets ? "搜索中" : "搜索"}
                 </button>
               </div>
+              <div className="asset-tools" aria-label="素材搜索设置">
+                <div className="segmented-control" role="group" aria-label="素材类型">
+                  {(Object.keys(assetSearchTypeLabels) as AssetSearchType[]).map((type) => (
+                    <button
+                      key={type}
+                      className={assetSearchType === type ? "is-active" : ""}
+                      onClick={() => setAssetSearchType(type)}
+                    >
+                      {assetSearchTypeLabels[type]}
+                    </button>
+                  ))}
+                </div>
+                <label className="compact-control">
+                  每类
+                  <input
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={assetPerPage}
+                    onChange={(event) => setAssetPerPage(clamp(Number(event.target.value), 1, 12))}
+                  />
+                </label>
+                <label className="compact-control">
+                  排序
+                  <select
+                    value={assetSortMode}
+                    onChange={(event) => setAssetSortMode(event.target.value as AssetSortMode)}
+                  >
+                    {(Object.keys(assetSortLabels) as AssetSortMode[]).map((mode) => (
+                      <option key={mode} value={mode}>
+                        {assetSortLabels[mode]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
               {assetError ? <p className="inline-error">{assetError}</p> : null}
-              {activeScene.assetCandidates.length > 0 ? (
+              {visibleAssets.length > 0 ? (
                 <div className="asset-grid">
-                  {activeScene.assetCandidates.map((asset) => (
+                  {visibleAssets.map((asset) => (
                     <AssetCard
                       key={asset.id}
                       asset={asset}
@@ -621,6 +694,28 @@ function downloadFile(filename: string, content: string, type: string) {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function sortAssets(assets: AssetCandidate[], sortMode: AssetSortMode): AssetCandidate[] {
+  return [...assets].sort((left, right) => {
+    if (sortMode === "resolution") {
+      return right.width * right.height - left.width * left.height;
+    }
+
+    if (sortMode === "duration") {
+      return (right.duration ?? 0) - (left.duration ?? 0);
+    }
+
+    return right.relevanceScore - left.relevanceScore;
+  });
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (Number.isNaN(value)) {
+    return min;
+  }
+
+  return Math.min(Math.max(value, min), max);
 }
 
 function toCsv(rows: string[][]): string {

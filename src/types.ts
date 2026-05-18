@@ -30,6 +30,8 @@ export interface KeywordGroup {
 }
 
 export type AssetCandidateType = "photo" | "video";
+export type AssetSearchType = "all" | "photo" | "video";
+export type AssetSortMode = "relevance" | "resolution" | "duration";
 
 export interface AssetCandidate {
   id: string;

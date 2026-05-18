@@ -428,6 +428,51 @@ select {
   text-decoration: none;
 }
 
+.asset-tools {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) 92px 132px;
+  gap: 10px;
+  align-items: end;
+}
+
+.segmented-control {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  min-height: 38px;
+  border: 1px solid #ccd5c5;
+  border-radius: 8px;
+  background: #eef3e9;
+  padding: 4px;
+}
+
+.segmented-control button {
+  min-height: 30px;
+  border-radius: 6px;
+  background: transparent;
+  color: #4c5b51;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.segmented-control button.is-active {
+  background: #ffffff;
+  color: #1f3429;
+  box-shadow: 0 1px 2px rgba(38, 53, 45, 0.12);
+}
+
+.compact-control {
+  display: grid;
+  color: #4c5b51;
+  font-size: 12px;
+}
+
+.compact-control input,
+.compact-control select {
+  min-height: 38px;
+  margin-top: 4px;
+}
+
 .asset-panel-header button:disabled {
   cursor: wait;
   opacity: 0.66;
@@ -617,6 +662,7 @@ select {
   .workspace,
   .keyword-grid,
   .asset-grid,
+  .asset-tools,
   .editor-grid,
   .editor-header {
     grid-template-columns: 1fr;

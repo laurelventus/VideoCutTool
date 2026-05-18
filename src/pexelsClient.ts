@@ -1,7 +1,8 @@
-import type { AssetCandidate, AspectRatio, ScenePlan } from "./types";
+import type { AssetCandidate, AspectRatio, AssetSearchType, ScenePlan } from "./types";
 
 interface SearchOptions {
   aspectRatio: AspectRatio;
+  assetType: AssetSearchType;
   perPage?: number;
 }
 
